@@ -12,7 +12,12 @@ class BusinessOwnerProfile(models.Model):
     # These fields store the business owner's public and payment information.
     full_name = models.CharField(max_length=200, blank=True, help_text="The full name of the business owner.")
     business_name = models.CharField(max_length=200, blank=True, help_text="The official name of the business.")
+    # Payment / receiving details (for reminders: "Pay via UPI / transfer to this account")
     upi_id = models.CharField(max_length=100, blank=True, help_text="The UPI ID where the business owner receives payments.")
+    phone_number = models.CharField(max_length=20, blank=True, help_text="Business contact number (e.g. for payment).")
+    bank_account_number = models.CharField(max_length=50, blank=True, help_text="Bank account number for transfers.")
+    bank_name = models.CharField(max_length=100, blank=True, help_text="Name of the bank.")
+    ifsc_code = models.CharField(max_length=20, blank=True, help_text="IFSC code of the branch.")
 
     def __str__(self):
         return f"Profile for {self.user.username}"

@@ -5,15 +5,18 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CustomerViewSet, 
+    CustomerViewSet,
     DealViewSet,
     RegisterView,
     LoginView,
     ProfileView,
     UserProfileView,
-    ClientVerificationView,
-    SimulatedPaymentView,
-    ContactFormView
+    ContactFormView,
+    SendSignupOTPView,
+    VerifySignupOTPView,
+    ForgotPasswordView,
+    VerifyResetOTPView,
+    ResetPasswordView,
 )
 
 # The router handles the Customer and Deal ViewSets automatically.
@@ -28,7 +31,11 @@ urlpatterns = [
     
     # URL for user registration
     path('register/', RegisterView.as_view(), name='register'),
-    
+    path('send-signup-otp/', SendSignupOTPView.as_view(), name='send-signup-otp'),
+    path('verify-signup-otp/', VerifySignupOTPView.as_view(), name='verify-signup-otp'),
+    path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
+    path('verify-reset-otp/', VerifyResetOTPView.as_view(), name='verify-reset-otp'),
+    path('reset-password/', ResetPasswordView.as_view(), name='reset-password'),
     path('login/', LoginView.as_view(), name='login'),
     
     # URL for the business owner's profile
@@ -36,10 +43,6 @@ urlpatterns = [
     
     # URL for user profile
     path('user/profile/', UserProfileView.as_view(), name='user-profile'),
-    
-    # Public URLs for the client's journey
-    path('verify/<uuid:deal_id>/', ClientVerificationView.as_view(), name='client-verify'),
-    path('pay/<uuid:deal_id>/', SimulatedPaymentView.as_view(), name='client-pay'),
     
     # Contact form endpoint
     path('contact/', ContactFormView.as_view(), name='contact-form'),

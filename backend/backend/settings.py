@@ -158,3 +158,12 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 
 # Admin email for receiving contact form submissions
 ADMIN_EMAIL = config('ADMIN_EMAIL', default='bhavinmeta009@gmail.com')
+
+# Cache for OTP (signup & password reset). Use Redis in production for multi-worker.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+OTP_EXPIRE_SECONDS = 600   # 10 minutes
+RESET_TOKEN_EXPIRE_SECONDS = 600  # 10 minutes for reset token

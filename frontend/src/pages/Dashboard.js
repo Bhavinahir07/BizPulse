@@ -1,9 +1,9 @@
 import {
-    AppBar, Box, Card, CardContent, Chip, Container, CssBaseline, Drawer, Grid, IconButton,
+    AppBar, Box, Card, CardContent, Chip, Container, CssBaseline, Drawer, FormControl, Grid, IconButton,
     List, ListItem, ListItemIcon, ListItemText, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Toolbar, Typography, SpeedDial, SpeedDialAction, SpeedDialIcon, Avatar,
     LinearProgress, Tooltip, Badge, Button, Tab, Tabs, Paper, Divider, Alert, Snackbar, CircularProgress,
-    Dialog, DialogTitle, DialogContent, DialogActions, Menu, MenuItem, TextField
+    Dialog, DialogTitle, DialogContent, DialogActions, Menu, MenuItem, TextField, Select
 } from '@mui/material';
 import {
     Menu as MenuIcon, Dashboard as DashboardIcon, People as PeopleIcon, Receipt as ReceiptIcon,
@@ -32,7 +32,7 @@ const API_BASE_URL = 'http://127.0.0.1:8000/api';
 const api = axios.create({ baseURL: API_BASE_URL });
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('access_token');
+        const token = localStorage.getItem('access') || localStorage.getItem('access_token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
@@ -251,6 +251,7 @@ const ProfileModal = ({ open, onClose, user, businessProfile }) => {
     const [editMode, setEditMode] = useState(false);
     const [formData, setFormData] = useState({});
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
 
     const { updateUser, updateBusinessProfile, fetchUserProfile } = useContext(UserContext);
 
@@ -267,6 +268,10 @@ const ProfileModal = ({ open, onClose, user, businessProfile }) => {
                 full_name: businessProfile?.full_name || '',
                 business_name: businessProfile?.business_name || '',
                 upi_id: businessProfile?.upi_id || '',
+                phone_number: businessProfile?.phone_number || '',
+                bank_account_number: businessProfile?.bank_account_number || '',
+                bank_name: businessProfile?.bank_name || '',
+                ifsc_code: businessProfile?.ifsc_code || '',
             });
         }
     }, [user, businessProfile]);
@@ -292,20 +297,25 @@ const ProfileModal = ({ open, onClose, user, businessProfile }) => {
                 updateUser(userResponse.data);
             }
 
-            // Update business profile (only the fields that exist in the model)
-            if (businessProfile) {
-                const profileResponse = await api.put('/profile/', {
-                    full_name: formData.full_name,
-                    business_name: formData.business_name,
-                    upi_id: formData.upi_id,
-                });
-                updateBusinessProfile(profileResponse.data);
-            }
+            // Always save business profile (backend creates profile if missing). Do not skip when businessProfile is null.
+            const profileResponse = await api.put('/profile/', {
+                full_name: formData.full_name || '',
+                business_name: formData.business_name || '',
+                upi_id: formData.upi_id || '',
+                phone_number: formData.phone_number || '',
+                bank_account_number: formData.bank_account_number || '',
+                bank_name: formData.bank_name || '',
+                ifsc_code: formData.ifsc_code || '',
+            });
+            updateBusinessProfile(profileResponse.data);
 
+            setSaveError('');
             setEditMode(false);
             await fetchUserProfile();
         } catch (error) {
             console.error('Error saving profile:', error);
+            const errMsg = error.response?.data?.detail || error.response?.data?.error || (error.response?.data && typeof error.response.data === 'object' ? Object.values(error.response.data).flat().join(' ') : null) || 'Failed to save profile.';
+            setSaveError(errMsg || 'Failed to save profile.');
         } finally {
             setSaving(false);
         }
@@ -313,6 +323,7 @@ const ProfileModal = ({ open, onClose, user, businessProfile }) => {
 
     const handleCancel = () => {
         setEditMode(false);
+        setSaveError('');
         setFormData({
             username: user?.username || '',
             email: user?.email || '',
@@ -321,6 +332,10 @@ const ProfileModal = ({ open, onClose, user, businessProfile }) => {
             full_name: businessProfile?.full_name || '',
             business_name: businessProfile?.business_name || '',
             upi_id: businessProfile?.upi_id || '',
+            phone_number: businessProfile?.phone_number || '',
+            bank_account_number: businessProfile?.bank_account_number || '',
+            bank_name: businessProfile?.bank_name || '',
+            ifsc_code: businessProfile?.ifsc_code || '',
         });
     };
 
@@ -448,9 +463,126 @@ const ProfileModal = ({ open, onClose, user, businessProfile }) => {
                             <Grid item xs={12}>
                                 <TextField
                                     fullWidth
+                                    label="Full Name"
+                                    value={formData.full_name}
+                                    onChange={handleInputChange('full_name')}
+                                    disabled={!editMode}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                            '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                                            '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+                                            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                                        },
+                                        '& .MuiInputBase-input': { color: 'text.primary' },
+                                        '& .MuiInputLabel-root': { color: 'text.secondary' },
+                                    }}
+                                />
+                            </Grid>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
                                     label="Business Name"
                                     value={formData.business_name}
                                     onChange={handleInputChange('business_name')}
+                                    disabled={!editMode}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                            '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                                            '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+                                            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                                        },
+                                        '& .MuiInputBase-input': { color: 'text.primary' },
+                                        '& .MuiInputLabel-root': { color: 'text.secondary' },
+                                    }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="UPI ID"
+                                    placeholder="yourname@bank"
+                                    value={formData.upi_id}
+                                    onChange={handleInputChange('upi_id')}
+                                    disabled={!editMode}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                            '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                                            '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+                                            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                                        },
+                                        '& .MuiInputBase-input': { color: 'text.primary' },
+                                        '& .MuiInputLabel-root': { color: 'text.secondary' },
+                                    }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Phone Number"
+                                    placeholder="e.g. +919876543210"
+                                    value={formData.phone_number}
+                                    onChange={handleInputChange('phone_number')}
+                                    disabled={!editMode}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                            '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                                            '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+                                            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                                        },
+                                        '& .MuiInputBase-input': { color: 'text.primary' },
+                                        '& .MuiInputLabel-root': { color: 'text.secondary' },
+                                    }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Bank Account Number"
+                                    value={formData.bank_account_number}
+                                    onChange={handleInputChange('bank_account_number')}
+                                    disabled={!editMode}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                            '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                                            '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+                                            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                                        },
+                                        '& .MuiInputBase-input': { color: 'text.primary' },
+                                        '& .MuiInputLabel-root': { color: 'text.secondary' },
+                                    }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Bank Name"
+                                    value={formData.bank_name}
+                                    onChange={handleInputChange('bank_name')}
+                                    disabled={!editMode}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                            '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
+                                            '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+                                            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+                                        },
+                                        '& .MuiInputBase-input': { color: 'text.primary' },
+                                        '& .MuiInputLabel-root': { color: 'text.secondary' },
+                                    }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="IFSC Code"
+                                    placeholder="e.g. SBIN0001234"
+                                    value={formData.ifsc_code}
+                                    onChange={handleInputChange('ifsc_code')}
                                     disabled={!editMode}
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
@@ -602,10 +734,16 @@ const ProfileModal = ({ open, onClose, user, businessProfile }) => {
                 )}
             </DialogContent>
 
+            {saveError && (
+                <Alert severity="error" onClose={() => setSaveError('')} sx={{ mx: 3, mb: 1 }}>
+                    {saveError}
+                </Alert>
+            )}
+
             <DialogActions sx={{ p: 3, pt: 0 }}>
                 {!editMode ? (
                     <Button
-                        onClick={() => setEditMode(true)}
+                        onClick={() => { setEditMode(true); setSaveError(''); }}
                         variant="contained"
                         startIcon={<EditIcon />}
                         sx={{
@@ -849,6 +987,18 @@ export default function Dashboard2() {
         } catch (err) {
             console.error('Failed to send reminder:', err);
             setSnackbar({ open: true, message: err.response?.data?.error || 'Failed to send reminder. Please try again.', severity: 'error' });
+        }
+    };
+
+    // Update deal status (Pending ↔ Paid) – manual; customer pays you outside the app
+    const handleStatusChange = async (dealId, newStatus) => {
+        try {
+            await api.patch(`/deals/${dealId}/`, { status: newStatus });
+            setSnackbar({ open: true, message: `Status updated to ${newStatus}.`, severity: 'success' });
+            fetchData();
+        } catch (err) {
+            console.error('Failed to update status:', err);
+            setSnackbar({ open: true, message: err.response?.data?.error || 'Failed to update status. Please try again.', severity: 'error' });
         }
     };
 
@@ -1310,15 +1460,22 @@ export default function Dashboard2() {
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Chip
-                                                        label={deal.status}
-                                                        size="small"
-                                                        sx={{
-                                                            backgroundColor: deal.status === 'Paid' ? 'success.main' : 'warning.main',
-                                                            color: 'white',
-                                                            fontWeight: 500
-                                                        }}
-                                                    />
+                                                    <FormControl size="small" sx={{ minWidth: 100 }}>
+                                                        <Select
+                                                            value={deal.status}
+                                                            onChange={(e) => handleStatusChange(deal.id, e.target.value)}
+                                                            sx={{
+                                                                color: 'white',
+                                                                fontWeight: 500,
+                                                                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.23)' },
+                                                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.4)' },
+                                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'primary.main' },
+                                                            }}
+                                                        >
+                                                            <MenuItem value="Pending">Pending</MenuItem>
+                                                            <MenuItem value="Paid">Paid</MenuItem>
+                                                        </Select>
+                                                    </FormControl>
                                                 </TableCell>
                                                 <TableCell>
                                                     <IconButton size="small" sx={{ color: 'primary.main' }} onClick={() => handleEditDeal(deal.id)}>

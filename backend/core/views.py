@@ -1,15 +1,17 @@
 # --- THIS IS THE FINAL and CORRECTED views.py FILE ---
 # It includes a security fix to resolve the 403 Forbidden error.
 
+import secrets
 from django.contrib.auth.models import User
 from django.core.mail import send_mail
+from django.core.cache import cache
 from django.conf import settings
 from rest_framework import viewsets, permissions, generics, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.authentication import JWTAuthentication # Import JWTAuthentication
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.contrib.auth import authenticate
 from django.utils import timezone
 
@@ -68,29 +70,198 @@ class DealViewSet(viewsets.ModelViewSet):
         if deal.status == 'Paid':
             return Response({'error': 'This deal has already been paid.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        BASE_URL = "https://your-frontend-ngrok-url.io" # <-- Point to React App
-        verification_link = f"{BASE_URL}/verify/{deal.id}/"
-        
         customer_name = deal.customer.name
         customer_contact_email = deal.customer.email
         amount = deal.amount
-        
+        description = deal.description
+
         if not customer_contact_email:
             return Response({'error': 'This customer does not have an email address saved.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        subject = f"Payment Reminder: {deal.description}"
-        html_message = ( f"<h3>Hi {customer_name},</h3>" f"<p>This is a friendly reminder that your payment of <strong>₹{amount}</strong> is due.</p>" f"<p>Please use the secure link below to verify and complete your payment:</p>" f"<p><a href='{verification_link}' style='background-color:#4F46E5; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'><strong>Click Here to Pay</strong></a></p>" )
-        plain_message = f"Hi {customer_name}, your payment of ₹{amount} is due. Pay here: {verification_link}"
-        
+        subject = f"Payment Reminder: {description}"
+        html_message = (
+            f"<h3>Hi {customer_name},</h3>"
+            f"<p>This is a friendly reminder that your payment of <strong>₹{amount}</strong> for <strong>{description}</strong> is due.</p>"
+            f"<p>Please pay the business directly (cash, UPI, or bank transfer) when convenient.</p>"
+        )
+        plain_message = f"Hi {customer_name}, your payment of ₹{amount} for {description} is due. Please pay the business directly."
+
         try:
             send_mail(subject, plain_message, settings.EMAIL_HOST_USER, [customer_contact_email], html_message=html_message)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({'success': 'Reminder email sent successfully!', 'link': verification_link})
+        return Response({'success': 'Reminder email sent successfully!'})
 
 
-# --- USER MANAGEMENT & PROFILE ENDPOINTS (Unchanged) ---
+# --- OTP SIGNUP (real email: OTP sent to email, only real inbox can verify) ---
+
+def _send_otp_email(email, otp, subject_prefix="Your verification code"):
+    subject = f"{subject_prefix} - BizPulse"
+    message = f"Your OTP is: {otp}. Valid for 10 minutes. Do not share."
+    html = f"<p>Your verification code is: <strong>{otp}</strong></p><p>Valid for 10 minutes. Do not share.</p>"
+    send_mail(subject, message, settings.EMAIL_HOST_USER, [email], html_message=html, fail_silently=False)
+
+
+class SendSignupOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        first_name = (request.data.get("first_name") or "").strip()
+        last_name = (request.data.get("last_name") or "").strip()
+        password = request.data.get("password") or ""
+
+        if not all([email, first_name, last_name, password]):
+            return Response({"error": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(email=email).exists():
+            return Response({"error": "An account already exists with this email."}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp = str(secrets.randbelow(900000) + 100000)  # 6 digits
+        expire = getattr(settings, "OTP_EXPIRE_SECONDS", 600)
+        cache.set(f"otp_signup_{email}", otp, expire)
+        cache.set(f"signup_data_{email}", {
+            "first_name": first_name,
+            "last_name": last_name,
+            "password": password,
+        }, expire)
+
+        try:
+            _send_otp_email(email, otp, "Signup verification")
+        except Exception as e:
+            return Response({"error": "Failed to send OTP. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"success": True, "message": "OTP sent to your email."})
+
+
+class VerifySignupOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        otp = (request.data.get("otp") or "").strip()
+
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_otp = cache.get(f"otp_signup_{email}")
+        if not cached_otp or cached_otp != otp:
+            return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = cache.get(f"signup_data_{email}")
+        if not data:
+            return Response({"error": "Session expired. Please sign up again."}, status=status.HTTP_400_BAD_REQUEST)
+
+        first_name = data["first_name"]
+        last_name = data["last_name"]
+        password = data["password"]
+
+        base_username = (first_name + last_name).lower().replace(" ", "") or email.split("@")[0]
+        username = base_username
+        c = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{c}"
+            c += 1
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        BusinessOwnerProfile.objects.get_or_create(user=user)
+
+        cache.delete(f"otp_signup_{email}")
+        cache.delete(f"signup_data_{email}")
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "user": UserSerializer(user).data,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }, status=status.HTTP_201_CREATED)
+
+
+# --- FORGOT / RESET PASSWORD (only registered email, OTP to inbox) ---
+
+class ForgotPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "Email not registered."}, status=status.HTTP_404_NOT_FOUND)
+
+        otp = str(secrets.randbelow(900000) + 100000)
+        expire = getattr(settings, "OTP_EXPIRE_SECONDS", 600)
+        cache.set(f"otp_reset_{email}", otp, expire)
+
+        try:
+            _send_otp_email(email, otp, "Password reset")
+        except Exception as e:
+            return Response({"error": "Failed to send OTP. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"success": True, "message": "OTP sent to your email."})
+
+
+class VerifyResetOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        otp = (request.data.get("otp") or "").strip()
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_otp = cache.get(f"otp_reset_{email}")
+        if not cached_otp or cached_otp != otp:
+            return Response({"error": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        reset_token = secrets.token_urlsafe(32)
+        expire = getattr(settings, "RESET_TOKEN_EXPIRE_SECONDS", 600)
+        cache.set(f"reset_token_{email}", reset_token, expire)
+        cache.delete(f"otp_reset_{email}")
+
+        return Response({"success": True, "reset_token": reset_token, "email": email})
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        reset_token = (request.data.get("reset_token") or "").strip()
+        new_password = request.data.get("new_password") or ""
+
+        if not email or not reset_token or not new_password:
+            return Response({"error": "Email, reset token and new password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_token = cache.get(f"reset_token_{email}")
+        if not cached_token or cached_token != reset_token:
+            return Response({"error": "Invalid or expired reset link. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_password(new_password)
+        user.save()
+        cache.delete(f"reset_token_{email}")
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "success": True,
+            "message": "Password updated. You are now logged in.",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        })
+
+
+# --- USER MANAGEMENT & PROFILE ENDPOINTS ---
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -100,6 +271,8 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        # Create empty BusinessOwnerProfile so /profile/ works; user fills UPI/phone/bank on Business Profile page
+        BusinessOwnerProfile.objects.get_or_create(user=user)
         refresh = RefreshToken.for_user(user)
         return Response({ "user": UserSerializer(user).data, "refresh": str(refresh), "access": str(refresh.access_token), }, status=status.HTTP_201_CREATED)
 
@@ -126,8 +299,11 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = BusinessOwnerProfileSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated, IsOwner]
+
     def get_object(self):
-        return self.request.user.businessownerprofile
+        # Ensure every user has a profile (e.g. old users created before we added get_or_create on register)
+        profile, _ = BusinessOwnerProfile.objects.get_or_create(user=self.request.user)
+        return profile
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
@@ -137,35 +313,6 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
-
-
-# --- PUBLIC-FACING ENDPOINTS (Unchanged) ---
-
-class ClientVerificationView(APIView):
-    permission_classes = [permissions.AllowAny]
-    def post(self, request, deal_id, format=None):
-        try:
-            deal = Deal.objects.get(id=deal_id)
-            submitted_name = request.data.get('full_name', '').strip()
-            if submitted_name.lower() == deal.customer.name.strip().lower():
-                return Response({ 'success': True, 'deal': DealSerializer(deal).data })
-            else:
-                return Response({'success': False, 'error': 'Name does not match.'}, status=status.HTTP_400_BAD_REQUEST)
-        except Deal.DoesNotExist:
-            return Response({'success': False, 'error': 'Invalid invoice link.'}, status=status.HTTP_404_NOT_FOUND)
-
-class SimulatedPaymentView(APIView):
-    permission_classes = [permissions.AllowAny]
-    def post(self, request, deal_id, format=None):
-        try:
-            deal = Deal.objects.get(id=deal_id)
-            if deal.status == 'Paid':
-                 return Response({'success': False, 'message': 'This deal has already been paid.'}, status=status.HTTP_400_BAD_REQUEST)
-            deal.status = 'Paid'
-            deal.save()
-            return Response({'success': True, 'message': 'Payment successful! Thank you.'})
-        except Deal.DoesNotExist:
-            return Response({'success': False, 'error': 'Invalid invoice link.'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # --- CONTACT FORM EMAIL ENDPOINT ---

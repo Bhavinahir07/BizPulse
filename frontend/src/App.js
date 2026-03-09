@@ -13,8 +13,6 @@ import Dashboard from './pages/Dashboard'; // Assuming you moved it to pages
 import BusinessProfilePage from './pages/BusinessProfilePage';
 import RequestResetPage from './pages/RequestResetPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import ClientVerificationPage from './pages/ClientVerificationPage';
-import SecurePaymentPage from './pages/SecurePaymentPage';
 
 /*************  ✨ Windsurf Command ⭐  *************/
 /**
@@ -41,9 +39,6 @@ export default function App() {
         <Route path="/business-profile" element={<BusinessProfilePage />} />
         <Route path="/forgot-password" element={<RequestResetPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/ClientVerificationPage" element={<ClientVerificationPage/>}/>
-        <Route path="/SecurePaymentPage" element={<SecurePaymentPage/>}/>
-
 
         {/* Protected Application Area */}
         <Route

@@ -135,6 +135,9 @@ export default function LoginPage() {
                             >
                                 Log in
                             </Button>
+                            <Typography sx={{ textAlign: 'center', mt: 2 }}>
+                                <span onClick={() => navigate('/forgot-password')} style={{ color: themeColors.accent, cursor: 'pointer', textDecoration: 'none' }}>Forgot password?</span>
+                            </Typography>
                         </Box>
                     </form>
                 </Grid>

@@ -40,7 +40,7 @@ class BusinessOwnerProfileSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = BusinessOwnerProfile
-        fields = ['full_name', 'business_name', 'upi_id']
+        fields = ['full_name', 'business_name', 'upi_id', 'phone_number', 'bank_account_number', 'bank_name', 'ifsc_code']
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -120,7 +120,7 @@ class BusinessOwnerProfileSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = BusinessOwnerProfile
-        fields = ['full_name', 'business_name', 'upi_id']
+        fields = ['full_name', 'business_name', 'upi_id', 'phone_number', 'bank_account_number', 'bank_name', 'ifsc_code']
 
 
 class CustomerSerializer(serializers.ModelSerializer):
