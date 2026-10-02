@@ -18,7 +18,7 @@ BizPulse is a Customer Relationship Management (CRM) system designed to help bus
 Backend:
 
 * Python
-* FastAPI / Django (whatever you used)
+* Django
 
 Frontend:
 
